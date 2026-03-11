@@ -1,0 +1,51 @@
+#!/bin/bash
+
+OUTPUT="_merged.txt"
+# Единый список исключений
+IGNORE_LIST=("_*" "tmp*" ".git" "node_modules" "venv" "*.log" "$OUTPUT")
+
+# 1. Формируем строку исключений для tree (через |)
+TREE_PATTERN=$(IFS='|'; echo "${IGNORE_LIST[*]}")
+
+# 2. Формируем аргументы для find
+EXCLUDE_ARGS=()
+for item in "${IGNORE_LIST[@]}"; do
+    [[ ${#EXCLUDE_ARGS[@]} -gt 0 ]] && EXCLUDE_ARGS+=("-o")
+    EXCLUDE_ARGS+=("-name" "$item" "-prune")
+done
+
+# --- НАЧАЛО ЗАПИСИ В ФАЙЛ ---
+
+# Записываем PWD и структуру (перезаписываем файл '>')
+{
+    pwd
+    echo -e "\n--- Структура проекта ---\n"
+    tree -L 3 -I "$TREE_PATTERN"
+    echo -e "\n---\n"
+} > "$OUTPUT"
+
+# Переменная для вывода в терминал
+FILE_LIST=""
+
+# 3. Сбор содержимого файлов (дозапись '>>')
+while read -r file; do
+    # Проверяем, что это текст и файл не пустой (или текстовый пустой)
+    if file "$file" | grep -iqE 'text|json|xml|javascript|source|markdown|empty'; then
+        FULL_PATH="$(pwd)/${file#./}"
+
+        {
+            echo "-- $FULL_PATH:"
+            cat "$file"
+            echo -e "\n"
+        } >> "$OUTPUT"
+
+        FILE_LIST+="$FULL_PATH\n"
+    fi
+done < <(find . \( "${EXCLUDE_ARGS[@]}" \) -o -type f -print)
+
+# Вывод списка путей в консоль
+echo -e "\n=== Файлы собраны в $OUTPUT ===\n"
+echo -e "$FILE_LIST"
+cat "$OUTPUT" | xclip -selection clipboard
+# cat "$OUTPUT" | pbcopy (macOS)
+echo "==============================="
